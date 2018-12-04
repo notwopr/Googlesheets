@@ -1,0 +1,75 @@
+
+//Create custom menu to run functions on demand
+function onOpen(){
+var ui = SpreadsheetApp.getUi()
+  .createMenu('Update Stock Data')
+  .addItem('Import Latest Stock Prices','getQuote')
+  .addToUi();
+}
+
+//Define Sheets
+var activesheet = SpreadsheetApp.getActiveSpreadsheet();
+var pricesheet = activesheet.getSheetByName('Prices');
+var inputsheet = activesheet.getSheetByName('Inputs');
+var lastrow = inputsheet.getLastRow();
+var lastcolumn = inputsheet.getLastColumn();
+var tickerstring = "Ticker";
+var tickerstartrow = "";
+var tickercol = "";
+
+
+//Clear the Pricesheet, or Create One
+if (pricesheet == null) {activesheet.insertSheet('Prices');
+pricesheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Prices');} 
+
+else {pricesheet.clear();}  //else, clear sheet
+
+
+
+
+//Retrieve and Paste Ticker Quotes
+
+
+function getQuote(){
+
+// I. Search for Ticker List
+function searchTicker(){ 
+
+//Define Search Range
+var range = inputsheet.getRange(1,1,lastrow, lastcolumn).getValues();
+
+//Run Search
+    for (var i = 0; i < lastrow; i++) {
+      for (var j = 0; j < lastcolumn; j++) {
+        if (range[i][j] == tickerstring) {
+        tickerstartrow = i + 2;
+        tickercol = j + 1; } 
+      } 
+    }
+}
+searchTicker();
+
+
+// II. Get Ticker List
+var tickerlist = inputsheet.getRange(tickerstartrow,tickercol,lastrow-2).getValues();
+
+
+//III. Paste Googlefinance formulas
+for (k = 0; k < lastrow-3; k++) {
+pricesheet.getRange(1,(2*k)+1).setValue(tickerlist[k+1]);
+pricesheet.getRange(2,(2*k)+1).setFormula("=googlefinance(\"" + tickerlist[k+1] + "\"\,\"close\"\,DATE(YEAR(\'Inputs\'\!B4),MONTH(\'Inputs\'\!B4),DAY(\'Inputs\'\!B4)),DATE(YEAR(TODAY()-1),MONTH(TODAY()-1),DAY(TODAY()-1)))");
+}
+
+
+//IV. Format Numbers
+for (q = 0; q < tickerlist.length; q++) {
+pricesheet.getRange(3,2*q+1,pricesheet.getLastRow()).setNumberFormat("mm-dd-yyyy");
+pricesheet.getRange(3,2*q+2,pricesheet.getLastRow()).setNumberFormat("$###,###,###.00");
+}
+
+
+//V. Format Style
+pricesheet.getRange(1,1,pricesheet.getLastRow(),pricesheet.getLastColumn()).setFontFamily('Roboto Mono');
+pricesheet.getRange(1,1,pricesheet.getLastRow(),pricesheet.getLastColumn()).setFontSize('10');
+pricesheet.getRange(1,1,2,pricesheet.getLastColumn()).setFontWeight('bold');
+}
