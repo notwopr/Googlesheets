@@ -1,3 +1,18 @@
+//GLOBAL DEFINITIONS
+var activesheet = SpreadsheetApp.getActiveSpreadsheet();
+var inputsheet = activesheet.getSheetByName('Inputs');
+pricesheet = activesheet.getSheetByName('Prices');
+var inputlastcoord = [];
+var tickercellcoord = [];
+var tickerlist = "";
+var tickerlistheader = "Ticker";
+var dateCell = "'Inputs'!$B$5";
+var pricelastcoord = [];
+var rankerlastcoord = [];
+
+
+
+//FUNCTION LIBRARY
 
 //Create custom menu to run functions on demand
 function onOpen(){
@@ -7,18 +22,6 @@ var ui = SpreadsheetApp.getUi()
   .addItem('Update Stock Ranker','updateRanker')
   .addToUi();
 };
-
-//GLOBAL DEFINITIONS
-var activesheet = SpreadsheetApp.getActiveSpreadsheet();
-var pricesheet = activesheet.getSheetByName('Prices');
-var inputsheet = activesheet.getSheetByName('Inputs');
-var inputlastcoord = [];
-var pricelastcoord = [];
-var tickercellcoord = [];
-var tickerlistheader = "Ticker";
-var tickerlist = "";
-
-//FUNCTION LIBRARY
 
 //Get last row and column
 function getLast(target,xvar){
@@ -67,6 +70,11 @@ function googQ(tickerName,dataType,startDate,endDate){
 return "googlefinance(\"" + tickerName + "\",\"" + dataType + "\"," + googDate(startDate) + "," + googDate(endDate) + ")";
 };
 
+//Replace formulas with solutions to those values
+function replaceForm(range){
+range.copyTo(range, {contentsOnly:true});
+};
+
 //Format numbers
 function formatnum(target,trbeg,tcbeg,trend,tcend,numf){target.getRange(trbeg,tcbeg,trend,tcend).setNumberFormat(numf)};
 
@@ -77,83 +85,143 @@ target.getRange(trbeg,tcbeg,trend,tcend).setFontSize(fts);
 target.getRange(trbeg,tcbeg,trend,tcend).setFontWeight(ftw);
 };
 
-
-
-//I. UPDATE STOCK PRICES
+//Update Stock Prices
 function getQuote(){
 
-//Clear Pricesheet
+//Clear Pricesheet or create one, and then define pricesheet
+
 clearInsert(pricesheet,"Prices",1);
 pricesheet = activesheet.getSheetByName('Prices');
-
-//Find Ticker list
-getLast(inputsheet,inputlastcoord);
-searchCell(inputsheet,1,1,inputlastcoord[0],inputlastcoord[1],tickerlistheader,tickercellcoord);
-tickerlist = inputsheet.getRange(tickercellcoord[0] + 1,tickercellcoord[1],inputlastcoord[0]-2).getValues();
 
 //Paste Data onto Price sheet
 for (var k = 0; k < tickerlist.length; k++) {
 //Header
 pasteValue(pricesheet.getRange(1,k + 2),tickerlist[k]);
 //Prices
-var priceSearch = googQ(tickerlist[k],"close","'Inputs'!$B$4","TODAY()");
+var priceSearch = googQ(tickerlist[k],"close",dateCell,"TODAY()");
 pasteFormula(pricesheet.getRange(2,k + 2),"=FILTER(INDEX(" + priceSearch + ",,2),INDEX(" + priceSearch + ",,2)<>\"Close\")");
 };
 
 //Date Column
-var dateColumn = googQ(tickerlist[0],"close","'Inputs'!B4","TODAY()");
+var dateColumn = googQ(tickerlist[0],"close",dateCell,"TODAY()");
 pasteFormula(pricesheet.getRange(2,1),"=FILTER(INDEX(" + dateColumn + ",0,1),INDEX(" + dateColumn + ",0,1)<>\"Date\")");
 
+//Convert all data/formulas to hard values
+pricelastcoord = [];
+getLast(pricesheet,pricelastcoord);
+pricesheetData = pricesheet.getRange(1,1,pricelastcoord[0],pricelastcoord[1]);
+replaceForm(pricesheetData);
 
 //Format Pricesheet
-getLast(pricesheet,pricelastcoord);
 formatnum(pricesheet,2,1,pricelastcoord[0],1,"mm-dd-yyyy");
-formatnum(pricesheet,2,2,pricelastcoord[0],pricelastcoord[1],"$###,###,###.00");
+formatnum(pricesheet,2,2,pricelastcoord[0],pricelastcoord[1],"$###,###,##0.00");
 formatfont(pricesheet,1,1,pricelastcoord[0],pricelastcoord[1],"Roboto Mono","10","Normal");
 formatfont(pricesheet,1,1,1,pricelastcoord[1],"Roboto Mono","10","Bold");
 formatfont(pricesheet,1,1,pricelastcoord[0],1,"Roboto Mono","10","Bold");
+
+
+//Move Order of sheets
+inputsheet;
+activesheet.moveActiveSheet(1);
+pricesheet;
+activesheet.moveActiveSheet(2);
 };
 
-
-
-
-//II. UPDATE STATISTICAL ANALYSES
+//Update Statistical Analysis
 function updateRanker(){
 
-//Definitions
-var rankersheet = activesheet.getSheetByName('Ranker');
-
-//Clear the Ranker sheet, or Create One
-clearInsert(rankersheet,"Ranker",2);
+//Clear the Ranker sheet, or Create One, and then define rankersheet
+rankersheet = activesheet.getSheetByName('Ranker');
+clearInsert(rankersheet,"Ranker",1);
 rankersheet = activesheet.getSheetByName('Ranker');
 
 //Header
 var headerlib = ["Stock","Purchase Date","Purchase Price","Shares Purchased","Cost Basis"];
-for (t = 0; t < headerlib.length; t++){
-pasteValue(rankersheet.getRange(1,t + 2),headerlib[t]);
-};
+for (t = 0; t < headerlib.length; t++){pasteValue(rankersheet.getRange(1,t + 2),headerlib[t]);};
 
-//Ticker Column
-getLast(inputsheet,inputlastcoord);
-searchCell(inputsheet,1,1,inputlastcoord[0],inputlastcoord[1],tickerlistheader,tickercellcoord);
-tickerlist = inputsheet.getRange(tickercellcoord[0] + 1,tickercellcoord[1],inputlastcoord[0]-1).getValues();
-pasteValue(rankersheet.getRange(2,2,tickerlist.length,1),tickerlist);
-
+getQuote();
+prv = pricesheetData.getValues();
+for (var z = 0; z < tickerlist.length; z++) {
+var counter = z + 2;
 //Numbering Column
-
-//Purchase Date
-
-//Analysis
-
-//Format
-
-formatnum(rankersheet,2,3,tickerlist.length,3,"mm-dd-yyyy");
-formatnum(rankersheet,2,4,tickerlist.length,4,"$###,###,###.00");
-formatnum(rankersheet,2,5,tickerlist.length,5,"###,###,###.00000");
-formatnum(rankersheet,2,6,tickerlist.length,6,"$###,###,###.00");
-getLast(rankersheet);
-formatfont(rankersheet,1,1,lastrow,lastcol,"Roboto Mono","10","Normal");
-formatfont(rankersheet,1,1,1,lastcol,"Roboto Mono","10","Bold");
-
+pasteFormula(rankersheet.getRange(z + 2,1),"=countA(B$2:B" + counter + ")");
+//Ticker Column
+pasteValue(rankersheet.getRange(z + 2,2),tickerlist[z]);
+//Purchase Date Column
+pasteFormula(rankersheet.getRange(z + 2,3),"=" + dateCell);
+//Purchase Price
+pasteValue(rankersheet.getRange(z + 2,4),prv[1][z + 1]);
+//Shares
+pasteFormula(rankersheet.getRange(z + 2,5),"=(Inputs!$B$2/Inputs!$B$3)/" + "D" + counter);
+//Total Cost Basis
+pasteFormula(rankersheet.getRange(z + 2,6),"=D" + counter + "*E" + counter);//alternate calculation "=Inputs!$B$2/Inputs!$B$3");
 };
+
+
+//Fill Total Value col. accordingly
+var totalMod = tickerlist.length + 1;
+pasteValue(rankersheet.getRange(totalMod + 1,3,1,1),"Total");
+pasteFormula(rankersheet.getRange(totalMod + 1,6,1,1),"=sum(F2:F" + totalMod + ")");
+
+//7.  Average Daily Change Rate (adjustable period)
+//8.  StDev of DCR (adjustable)
+//9.  IPO
+//10. Age (Unit of Time adjustable)
+//11. Top ? AvDCR
+//12. Top ? DCR
+//13. Top ? Type 3
+//14. Top ? Type 4
+//15. Top ? Type 5
+//16. % samples failed Type 3
+//17. % samples failed Type 4
+//18. % samples failed Type 5
+//19. Index Score
+//20. Year Performance for each year
+//21. Number of Positive days out of Y days
+
+rankerlastcoord = [];
+getLast(rankersheet,rankerlastcoord);
+
+//Convert all data/formulas to hard values
+rankersheetData = rankersheet.getRange(1,1,rankerlastcoord[0] + 1,rankerlastcoord[1]);
+replaceForm(rankersheetData);
+
+//Format Numbers
+formatnum(rankersheet,2,3,tickerlist.length,1,"mm-dd-yyyy");
+formatnum(rankersheet,2,4,tickerlist.length,1,"$###,###,##0.00");
+formatnum(rankersheet,2,5,tickerlist.length,1,"###,###,##0.0000");
+formatnum(rankersheet,2,6,tickerlist.length + 1,1,"$###,###,##0.00");
+formatfont(rankersheet,1,1,rankerlastcoord[0],rankerlastcoord[1],"Roboto Mono","10","Normal");
+formatfont(rankersheet,1,1,1,rankerlastcoord[1],"Roboto Mono","10","Bold");
+
+
+//Move Order of sheets
+pricesheet;
+activesheet.moveActiveSheet(1);
+rankersheet;
+activesheet.moveActiveSheet(2);
+};
+
+
+
+
+//EXECUTE BELOW
+onOpen();
+inputlastcoord = [];
+getLast(inputsheet,inputlastcoord);
+//Get Tickerlist
+tickercellcoord = [];
+searchCell(inputsheet,1,1,inputlastcoord[0],inputlastcoord[1],tickerlistheader,tickercellcoord);
+tickerlist = inputsheet.getRange(tickercellcoord[0] + 1,tickercellcoord[1],inputlastcoord[0]-2).getValues();
+
+
+
+
+
+
+
+
+
+
+
 
