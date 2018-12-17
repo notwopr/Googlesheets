@@ -1,27 +1,32 @@
+//Create custom menu to run functions on demand
+function onOpen(){
+var ui = SpreadsheetApp.getUi()
+.createMenu('Update Stock Data')
+.addItem('Refresh Input Sheet','refreshInput')
+.addItem('Import Latest Stock Prices','getQuote')
+.addItem('Overall Gain/Loss','overallGL')
+.addItem('Day to Day Change','dailyCR')
+.addItem('Average DCR','avDCR')
+.addToUi();
+};
+
 //GLOBAL DEFINITIONS
 var activesheet = SpreadsheetApp.getActiveSpreadsheet();
 var inputsheet = activesheet.getSheetByName('Inputs');
-pricesheet = activesheet.getSheetByName('Prices');
+var pricesheet = activesheet.getSheetByName('Prices');
 var inputlastcoord = [];
 var tickercellcoord = [];
+var tickerlistrange = "";
 var tickerlist = "";
 var tickerlistheader = "Ticker";
 var dateCell = "'Inputs'!$B$5";
 var pricelastcoord = [];
-var rankerlastcoord = [];
 
 
 
 //FUNCTION LIBRARY
 
-//Create custom menu to run functions on demand
-function onOpen(){
-var ui = SpreadsheetApp.getUi()
-  .createMenu('Update Stock Data')
-  .addItem('Import Latest Stock Prices','getQuote')
-  .addItem('Update Stock Ranker','updateRanker')
-  .addToUi();
-};
+
 
 //Get last row and column
 function getLast(target,xvar){
@@ -75,33 +80,21 @@ function replaceForm(range){
 range.copyTo(range, {contentsOnly:true});
 };
 
-//Format numbers
-function formatnum(target,trbeg,tcbeg,trend,tcend,numf){target.getRange(trbeg,tcbeg,trend,tcend).setNumberFormat(numf)};
-
-//Format fonts
-function formatfont(target,trbeg,tcbeg,trend,tcend,ft,fts,ftw) {
-target.getRange(trbeg,tcbeg,trend,tcend).setFontFamily(ft);
-target.getRange(trbeg,tcbeg,trend,tcend).setFontSize(fts);
-target.getRange(trbeg,tcbeg,trend,tcend).setFontWeight(ftw);
-};
 
 //Update Stock Prices
 function getQuote(){
 
 //Clear Pricesheet or create one, and then define pricesheet
-
-clearInsert(pricesheet,"Prices",1);
+clearInsert(pricesheet,"Prices",2);
 pricesheet = activesheet.getSheetByName('Prices');
 
-//Paste Data onto Price sheet
-for (var k = 0; k < tickerlist.length; k++) {
 //Header
-pasteValue(pricesheet.getRange(1,k + 2),tickerlist[k]);
+tickerlistrange.copyTo(pricesheet.getRange(1,2),SpreadsheetApp.CopyPasteType.PASTE_VALUES,true);
 //Prices
+for (var k = 0; k < tickerlist.length; k++) {
 var priceSearch = googQ(tickerlist[k],"close",dateCell,"TODAY()");
 pasteFormula(pricesheet.getRange(2,k + 2),"=FILTER(INDEX(" + priceSearch + ",,2),INDEX(" + priceSearch + ",,2)<>\"Close\")");
 };
-
 //Date Column
 var dateColumn = googQ(tickerlist[0],"close",dateCell,"TODAY()");
 pasteFormula(pricesheet.getRange(2,1),"=FILTER(INDEX(" + dateColumn + ",0,1),INDEX(" + dateColumn + ",0,1)<>\"Date\")");
@@ -109,119 +102,220 @@ pasteFormula(pricesheet.getRange(2,1),"=FILTER(INDEX(" + dateColumn + ",0,1),IND
 //Convert all data/formulas to hard values
 pricelastcoord = [];
 getLast(pricesheet,pricelastcoord);
-pricesheetData = pricesheet.getRange(1,1,pricelastcoord[0],pricelastcoord[1]);
-replaceForm(pricesheetData);
+replaceForm(pricesheet.getDataRange());
+
+//Clear Formatting
+pricesheet.clearFormats();
 
 //Format Pricesheet
-formatnum(pricesheet,2,1,pricelastcoord[0],1,"mm-dd-yyyy");
-formatnum(pricesheet,2,2,pricelastcoord[0],pricelastcoord[1],"$###,###,##0.00");
-formatfont(pricesheet,1,1,pricelastcoord[0],pricelastcoord[1],"Roboto Mono","10","Normal");
-formatfont(pricesheet,1,1,1,pricelastcoord[1],"Roboto Mono","10","Bold");
-formatfont(pricesheet,1,1,pricelastcoord[0],1,"Roboto Mono","10","Bold");
+pricesheet.getRange(2,1,pricelastcoord[0],1).setNumberFormat("mm-dd-yyyy");
+pricesheet.getRange(2,2,pricelastcoord[0],pricelastcoord[1]).setNumberFormat("$###,###,##0.00");
+pricesheet.getRange(1,1,pricelastcoord[0],pricelastcoord[1]).setFontFamily("Roboto Mono");
+pricesheet.getRange(1,1,pricelastcoord[0],pricelastcoord[1]).setFontSize("10");
+pricesheet.getRange(1,1,pricelastcoord[0],pricelastcoord[1]).setFontWeight("Normal");
+pricesheet.getRange(1,1,1,pricelastcoord[1]).setFontWeight("Bold");
+pricesheet.getRange(1,1,pricelastcoord[0],1).setFontWeight("Bold");
 
-
-//Move Order of sheets
-inputsheet;
-activesheet.moveActiveSheet(1);
-pricesheet;
-activesheet.moveActiveSheet(2);
+//Autofit Columns
+pricesheet.autoResizeColumns(1,pricelastcoord[1]);
 };
+
+
 
 //Update Statistical Analysis
-function updateRanker(){
 
-//Clear the Ranker sheet, or Create One, and then define rankersheet
-rankersheet = activesheet.getSheetByName('Ranker');
-clearInsert(rankersheet,"Ranker",1);
-rankersheet = activesheet.getSheetByName('Ranker');
+//Overall Gain/loss from Purchase date to the column date
+function overallGL(){
 
-//Header
-var headerlib = ["Stock","Purchase Date","Purchase Price","Shares Purchased","Cost Basis"];
-for (t = 0; t < headerlib.length; t++){pasteValue(rankersheet.getRange(1,t + 2),headerlib[t]);};
+//Clear sheet, or Create One, and then define sheet
+overallglsheet = activesheet.getSheetByName('OverallGL');
+clearInsert(overallglsheet,"OverallGL",4);
+overallglsheet = activesheet.getSheetByName('OverallGL');
 
-getQuote();
-prv = pricesheetData.getValues();
-for (var z = 0; z < tickerlist.length; z++) {
-var counter = z + 2;
-//Numbering Column
-pasteFormula(rankersheet.getRange(z + 2,1),"=countA(B$2:B" + counter + ")");
-//Ticker Column
-pasteValue(rankersheet.getRange(z + 2,2),tickerlist[z]);
-//Purchase Date Column
-pasteFormula(rankersheet.getRange(z + 2,3),"=" + dateCell);
-//Purchase Price
-pasteValue(rankersheet.getRange(z + 2,4),prv[1][z + 1]);
-//Shares
-pasteFormula(rankersheet.getRange(z + 2,5),"=(Inputs!$B$2/Inputs!$B$3)/" + "D" + counter);
-//Total Cost Basis
-pasteFormula(rankersheet.getRange(z + 2,6),"=D" + counter + "*E" + counter);//alternate calculation "=Inputs!$B$2/Inputs!$B$3");
+//Copy Pricesheet Data
+pricesheet = activesheet.getSheetByName('Prices');
+var pricelastcoord = [];
+getLast(pricesheet,pricelastcoord);
+var pricesheetData = pricesheet.getDataRange();
+pricesheetData.copyTo(overallglsheet.getRange(1,1), SpreadsheetApp.CopyPasteType.PASTE_VALUES,true);
+
+//Calculate and Paste Percentage Change from purchase Date
+var ogllastcoord = [];
+getLast(overallglsheet,ogllastcoord);
+var priceBoxRange = overallglsheet.getRange(2,3,ogllastcoord[0] - 1,ogllastcoord[1] - 2);
+var priceBox = [];
+priceBox = priceBoxRange.getValues();
+var purchPriceCol = [];
+purchPriceCol = overallglsheet.getRange(2,2,tickerlist.length,1).getValues();
+for (var b = 0; b < tickerlist.length; b++){
+for (var c = 0; c < ogllastcoord[1] - 2; c++){
+overallglsheet.getRange(b + 2,c + 3).setValue((priceBox[b][c] - purchPriceCol[b])/purchPriceCol[b]);
+};
+};
+
+//Fill Average Row
+overallglsheet.getRange(tickerlist.length + 2,2,1,1).setValue("Average");
+overallglsheet.getRange(tickerlist.length + 2,3,1,ogllastcoord[1] - 2).setFormula("=AVERAGE(C2:C71)");
+
+//Convert all data to hard values
+replaceForm(overallglsheet.getDataRange());
+
+//Clear Formatting
+overallglsheet.clearFormats();
+//Format
+overallglsheet.getRange(1,2,1,ogllastcoord[1] - 1).setNumberFormat("mm-dd-yyyy");
+overallglsheet.getRange(2,2,tickerlist.length,1).setNumberFormat("$###,###,##0.00");
+priceBoxRange.setNumberFormat("###,###,##0.00%");
+overallglsheet.getRange(tickerlist.length + 2,3,1,ogllastcoord[1] - 2).setNumberFormat("###,###,##0.00%");
+overallglsheet.getRange(1,1,ogllastcoord[0] + 1,ogllastcoord[1]).setFontFamily("Roboto Mono");
+overallglsheet.getRange(1,1,ogllastcoord[0] + 1,ogllastcoord[1]).setFontSize("10");
+overallglsheet.getRange(1,1,ogllastcoord[0] + 1,ogllastcoord[1]).setFontWeight("Normal");
+overallglsheet.getRange(1,2,1,ogllastcoord[1] - 1).setFontWeight("Bold");
+overallglsheet.getRange(tickerlist.length + 2,2,1,ogllastcoord[1] - 1).setFontWeight("Bold");
 };
 
 
-//Fill Total Value col. accordingly
-var totalMod = tickerlist.length + 1;
-pasteValue(rankersheet.getRange(totalMod + 1,3,1,1),"Total");
-pasteFormula(rankersheet.getRange(totalMod + 1,6,1,1),"=sum(F2:F" + totalMod + ")");
+function dailyCR() {customCalc('dailycr','Day to Day Change','dcrlastcoord');};
 
-//7.  Average Daily Change Rate (adjustable period)
-//8.  StDev of DCR (adjustable)
-//9.  IPO
-//10. Age (Unit of Time adjustable)
-//11. Top ? AvDCR
-//12. Top ? DCR
-//13. Top ? Type 3
-//14. Top ? Type 4
-//15. Top ? Type 5
-//16. % samples failed Type 3
-//17. % samples failed Type 4
-//18. % samples failed Type 5
-//19. Index Score
-//20. Year Performance for each year
-//21. Number of Positive days out of Y days
+function customCalc(sheetvar,shtname,lastcoordvar){
 
-rankerlastcoord = [];
-getLast(rankersheet,rankerlastcoord);
+//Clear sheet, or Create One, and then define sheet
+sheetvar = activesheet.getSheetByName(shtname);
+clearInsert(sheetvar,shtname,4);
+sheetvar = activesheet.getSheetByName(shtname);
 
-//Convert all data/formulas to hard values
-rankersheetData = rankersheet.getRange(1,1,rankerlastcoord[0] + 1,rankerlastcoord[1]);
-replaceForm(rankersheetData);
+//Get Latest Prices and Paste to new sheet
+var pricesheetData = pricesheet.getDataRange();
+pricesheetData.copyTo(sheetvar.getRange(1,1), SpreadsheetApp.CopyPasteType.PASTE_VALUES,true);
 
-//Format Numbers
-formatnum(rankersheet,2,3,tickerlist.length,1,"mm-dd-yyyy");
-formatnum(rankersheet,2,4,tickerlist.length,1,"$###,###,##0.00");
-formatnum(rankersheet,2,5,tickerlist.length,1,"###,###,##0.0000");
-formatnum(rankersheet,2,6,tickerlist.length + 1,1,"$###,###,##0.00");
-formatfont(rankersheet,1,1,rankerlastcoord[0],rankerlastcoord[1],"Roboto Mono","10","Normal");
-formatfont(rankersheet,1,1,1,rankerlastcoord[1],"Roboto Mono","10","Bold");
+//Custom Formula
+var lastcoordvar = [];
+getLast(sheetvar,lastcoordvar);
+var pasteRange = sheetvar.getRange(2,2,lastcoordvar[0] - 1,lastcoordvar[1] - 1).getValues();
+for (var b = 0; b < tickerlist.length; b++){
+for (var c = 0; c < lastcoordvar[1] - 2; c++){
+sheetvar.getRange(b + 2,c + 3).setValue((pasteRange[b][c + 1] - pasteRange[b][c])/pasteRange[b][c]);
+};
+rowArr = sheetvar.getRange(b + 2,3,1,lastcoordvar[1] - 2).getValues();
+sumrowArr = rowArr[0].reduce(function(sumtotal,currentValue){return sumtotal + currentValue});
+avofrow = sumrowArr/rowArr[0].length;
+pasteValue(sheetvar.getRange(b + 2,lastcoordvar[1] + 1,1,1),avofrow);
+};
 
+sheetvar.getRange(1,lastcoordvar[1] + 1,1,1).setValue("Average");
 
-//Move Order of sheets
-pricesheet;
-activesheet.moveActiveSheet(1);
-rankersheet;
-activesheet.moveActiveSheet(2);
+//Fill Average Row
+sheetvar.getRange(tickerlist.length + 2,2,1,1).setValue("Average");
+sheetvar.getRange(tickerlist.length + 2,3,1,lastcoordvar[1] - 1).setFormula("=AVERAGE(C2:C" + tickerlist.length + ")");
+
+//Convert all data to hard values
+replaceForm(sheetvar.getDataRange());
+
+//Clear Formatting
+sheetvar.clearFormats();
+//Format
+sheetvar.getRange(1,2,1,lastcoordvar[1] - 1).setNumberFormat("mm-dd-yyyy");
+sheetvar.getRange(2,2,tickerlist.length,1).setNumberFormat("$###,###,##0.00");
+sheetvar.getRange(2,3,lastcoordvar[0] - 1,lastcoordvar[1] - 1).setNumberFormat("###,###,##0.00%");
+sheetvar.getRange(tickerlist.length + 2,3,1,lastcoordvar[1] - 1).setNumberFormat("###,###,##0.00%");
+sheetvar.getRange(1,1,lastcoordvar[0] + 1,lastcoordvar[1] + 1).setFontFamily("Roboto Mono");
+sheetvar.getRange(1,1,lastcoordvar[0] + 1,lastcoordvar[1] + 1).setFontSize("10");
+sheetvar.getRange(1,1,lastcoordvar[0] + 1,lastcoordvar[1] + 1).setFontWeight("Normal");
+sheetvar.getRange(1,2,1,lastcoordvar[1]).setFontWeight("Bold");
+sheetvar.getRange(tickerlist.length + 2,2,1,lastcoordvar[1]).setFontWeight("Bold");
 };
 
 
 
+function avDCR() {customCalc2('avdcr','Average DCR','avdcrlastcoord');};
+function customCalc2(sheetvar,shtname,lastcoordvar){
 
-//EXECUTE BELOW
-onOpen();
+//Clear sheet, or Create One, and then define sheet
+sheetvar = activesheet.getSheetByName(shtname);
+clearInsert(sheetvar,shtname,4);
+sheetvar = activesheet.getSheetByName(shtname);
+
+
+//Get Tickerlist column and paste
+var dailycr = activesheet.getSheetByName('Day to Day Change');
+var dcrlastcoord = [];
+getLast(dailycr,dcrlastcoord);
+var tickerlistcol = dailycr.getRange(2,1,tickerlist.length,1);
+tickerlistcol.copyTo(sheetvar.getRange(2,1), SpreadsheetApp.CopyPasteType.PASTE_VALUES,false);
+//Get Latest Daily Change Rates and store data
+var dcrData = dailycr.getRange(2,3,tickerlist.length,dcrlastcoord[1] - 3).getValues();
+
+//Average over specified time span
+var numDays = 66;
+for (var w = 0; w < tickerlist.length; w++){
+arrRow = 0;
+arrRow = dcrData[w];
+for (var v = 0; v < dcrData[0].length - numDays + 1; v++){
+arrSamp = 0;
+arrSamp = arrRow.slice(0 + v,numDays + v);
+sumarrSamp = 0;
+sumarrSamp = arrSamp.reduce(function(sumtotal,currentValue){return sumtotal + currentValue});
+avofSamp = 0;
+avofSamp = sumarrSamp/arrSamp.length;
+pasteValue(sheetvar.getRange(2 + w,2 + v,1,1),avofSamp);
+};
+};
+
+//Convert all data to hard values
+replaceForm(sheetvar.getDataRange());
+
+sheetvar.insertRows(1,1);
+pasteValue(sheetvar.getRange(1,1,1,1),"Total number of days worth of data retrieved: " + dcrData[0].length);
+sheetvar.insertRows(1,1);
+pasteValue(sheetvar.getRange(1,1,1,1),"Timespan for calculating average: " + numDays + " Days");
+
+//Sample Numbering
+var lastcoordvar = [];
+getLast(sheetvar,lastcoordvar);
+for (var x = 0; x < lastcoordvar[1] - 1; x++) {pasteValue(sheetvar.getRange(3,2 + x,1,1),x + 1);};
+
+
+//Format
+sheetvar.clearFormats();
+sheetvar.getRange(4,2,lastcoordvar[0] - 1,lastcoordvar[1] - 1).setNumberFormat("###,###,##0.00%");
+sheetvar.getRange(1,1,lastcoordvar[0] + 1,lastcoordvar[1]).setFontFamily("Roboto Mono");
+sheetvar.getRange(1,1,lastcoordvar[0] + 1,lastcoordvar[1]).setFontSize("10");
+sheetvar.getRange(1,1,lastcoordvar[0] + 1,lastcoordvar[1]).setFontWeight("Normal");
+sheetvar.getRange(3,2,1,lastcoordvar[1] - 1).setFontWeight("Bold");
+};
+
+function refreshInput() {
 inputlastcoord = [];
 getLast(inputsheet,inputlastcoord);
 //Get Tickerlist
 tickercellcoord = [];
 searchCell(inputsheet,1,1,inputlastcoord[0],inputlastcoord[1],tickerlistheader,tickercellcoord);
-tickerlist = inputsheet.getRange(tickercellcoord[0] + 1,tickercellcoord[1],inputlastcoord[0]-2).getValues();
+tickerlistrange = inputsheet.getRange(tickercellcoord[0] + 1,tickercellcoord[1],inputlastcoord[0]-2);
+tickerlist = tickerlistrange.getValues();
+
+for (var q = 0; q < tickerlist.length; q++) {
+//Tickerlist Numbering
+pasteValue(inputsheet.getRange(tickercellcoord[0] + q + 1,tickercellcoord[1] - 1),q + 1);
+//Full Name
+pasteFormula(inputsheet.getRange(tickercellcoord[0] + q + 1,tickercellcoord[1] + 1),"=googlefinance(E3:E,\"name\")");
+};
+
+//Ticker with numbering
+tickerlistrangeNum = inputsheet.getRange(tickercellcoord[0] + 1,tickercellcoord[1] - 1,inputlastcoord[0]-2);
+tickerlistNum = tickerlistrangeNum.getValues();
+
+//Clear Formatting
+inputsheet.clearFormats();
+
+//Format
+inputsheet.getRange(1,1,inputlastcoord[0],inputlastcoord[1]).setFontFamily("Roboto Mono");
+inputsheet.getRange(1,1,inputlastcoord[0],inputlastcoord[1]).setFontSize("10");
+inputsheet.getRange(1,1,inputlastcoord[0],inputlastcoord[1]).setFontWeight("Normal");
+inputsheet.getRange(tickercellcoord[0] + 1,tickercellcoord[1] - 1,tickerlist.length,1).setNumberFormat("##");
+};
 
 
 
-
-
-
-
-
-
-
-
+//EXECUTE BELOW
+refreshInput();
 
